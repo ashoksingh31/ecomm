@@ -1,91 +1,105 @@
-# Design Decisions (ADRs)
 
-## Decision 1 — Single Logical Cart Per User
-**Choice:** One cart per authenticated user (not per session/device).
-**Why:** Consistent shopping experience across sessions. Concurrent
-multi-device synchronization would need optimistic locking in a
-production system with a real DB; out of scope for an in-memory,
-single-instance app.
+## Decision: Single Logical Cart Per User
 
-## Decision 2 — JWT-Based Authorization Using Claims
-**Choice:** Trust `user_id` and `is_admin` from the JWT rather than
-querying a database on every request.
-**Why:** Stateless, avoids unnecessary lookups. **Production note:** a
-centralized RBAC system with token revocation would be preferred where
-permissions change frequently.
+**Context:** What problem were you solving?
+Users may access the application from multiple devices or distinct browser sessions, creating potential divergence across active items and shopping state.
 
-## Decision 3 — Read-Only Product Catalog
-**Choice:** Preloaded, in-memory catalog with no CRUD endpoints.
-**Why:** Keeps the project focused on cart/checkout/discount logic, which
-is what's actually being evaluated.
+**Options Considered:**
+- Option A: Maintain separate isolated carts per individual session/device.
+- Option B: Maintain one logical cart per authenticated user mapped by a centralized identifier.
 
-## Decision 4 — Reserve Inventory Only At Checkout (N/A here — see note)
-Inventory is intentionally unlimited (Assumption 3), so there is no
-reservation step. This decision is kept in the doc for context since it
-shaped Decision 5 below (recompute everything at checkout, not earlier).
+**Choice:** Option B: Maintain one logical cart per authenticated user.
 
-## Decision 5 — Coupon Validation at Checkout, Not in the Cart
-**Choice:** The cart view shows an *estimated* subtotal from live prices;
-checkout recomputes everything from scratch and is the only place a
-discount code is validated/applied.
-**Why:** Prevents stale pricing or a stale discount eligibility check
-from leaking into what's actually charged.
+**Why:** A single cart provides a consistent shopping experience across sessions and devices. In a production system, concurrent cart updates would require conflict resolution (e.g., optimistic locking or versioning). Since this assignment uses in-memory storage and a single application instance, concurrent multi-device synchronization is outside the implementation scope but remains the intended design pattern.
 
-## Decision 6 — Immutable Order Snapshots
-**Choice:** `OrderLine` stores product name, unit price, and quantity at
-time of purchase — not just a product_id.
-**Why:** Historical orders stay accurate even if the catalog changes or
-a product is later removed.
+---
 
-## Decision 7 — Idempotent Checkout
-**Choice:** Every checkout call includes a client-generated
-`idempotency_key`. `OrderRepository` maps key → order; a repeated key
-returns the original order untouched instead of creating a duplicate.
-**Why:** Clients may retry after timeouts/network failures; this makes
-retries safe by construction.
+## Decision: JWT-Based Authorization Using Claims
 
-## Decision 8 — Milestone-Based Discount Codes (Store-Wide, "Nth Order")
-**Context:** The assignment requires that every Nth order unlocks a
-discount code, with generation triggered by an admin call rather than
-happening automatically inside checkout.
+**Context:** What problem were you solving?
+Administrative endpoints (such as coupon creation and deletion) require robust access controls, but full user authentication/session state management is outside the project scope.
 
-**Choice:**
-- The milestone counter is derived from `OrderRepository.count()`
-  (`total_orders // N`), not tracked as a separate mutable variable —
-  one source of truth, no drift risk.
-- `POST /admin/discount-codes/generate` compares milestones *reached*
-  against milestones *already awarded* and generates one code per
-  unclaimed milestone in a single call ("catch-up" generation). If the
-  admin hasn't called the endpoint in a while and multiple milestones
-  passed, every eligible customer still gets their code — nobody's
-  earned discount is silently dropped because of an admin call cadence.
-- The code is owned by whichever user placed the exact Nth order
-  (`order_at_sequence(milestone * N)`), is redeemable only by that user,
-  and is single-use (invalidated the moment checkout succeeds — not at
-  validation time, so a failed/retried checkout can't burn a code
-  without producing an order; this composes directly with Decision 7).
-- N and the discount percentage are fixed server-side config
-  (`src/config/settings.py`), not caller-supplied parameters.
+**Options Considered:**
+- Option A: Query a backing database storage layer for authorization permissions on every individual incoming request.
+- Option B: Trust cryptographically verified stateless JWT claims containing structural role definitions after primary validation checks.
 
-**Why:** These specifics (global vs per-user, ownership, single-use,
-fixed config) were explicitly decided with the project owner before
-implementation rather than inferred, since the assignment brief doesn't
-spell them out and guessing wrong here would misrepresent the intended
-business rule.
+**Choice:** Option B: Use JWT claims containing `user_id` and `is_admin`.
 
-## Decision 9 — Domain Errors, Not HTTPException, in the Service Layer
-**Choice:** Services raise typed exceptions from `src/core/exceptions.py`
-(e.g. `EmptyCartError`, `DiscountCodeAlreadyUsedError`). A single
-exception handler (`src/api/error_handlers.py`) maps these to HTTP status
-codes.
-**Why:** Keeps the service layer framework-agnostic and testable without
-spinning up FastAPI, and keeps route handlers free of repetitive
-try/except blocks.
+**Why:** Avoids unnecessary database lookups and keeps authorization stateless. This simplifies the implementation while remaining representative of common microservice production systems. Administrative permissions are extracted and validated in-memory directly within the dependency injection pipeline.
 
-## Decision 10 — Each Repository Owns Its Own Storage
-**Choice:** `ProductRepository`, `CartRepository`, `OrderRepository`, and
-`CouponRepository` each hold a private dict, rather than sharing one
-generic `memory_store.py` object.
-**Why:** Cleaner separation of responsibility; each repository's
-invalidation/query logic (e.g. milestone lookups, idempotency index) is
-local to the entity it concerns.
+---
+
+## Decision: Read-Only Product Catalog
+
+**Context:** What problem were you solving?
+The service must handle cart mutations and final product pricing valuations without expanding into a heavy, sprawling product catalog content management platform.
+
+**Options Considered:**
+- Option A: Build out complete Product CRUD APIs and administrative inventory modification modules.
+- Option B: Preload a fixed read-only catalog slice representing an upstream external catalog source.
+
+**Choice:** Option B: Use a preloaded read-only product catalog.
+
+**Why:** Keeps the project focused on checkout and cart logic while reflecting how dedicated product services commonly provide static read-optimized catalog data to downstream order services. Product prices are always obtained from the server-side catalog to ensure client requests cannot forge price points.
+
+---
+
+## Decision: Reserve Inventory During Checkout
+
+**Context:** What problem were you solving?
+Determining when to hold or deduct item stock counts so that items left in abandoned browser sessions do not lock up available warehouse supply.
+
+**Options Considered:**
+- Option A: Reserve inventory immediately when items are added to a casual browsing cart.
+- Option B: Validate and reserve inventory balances only during the explicit checkout transaction window.
+
+**Choice:** Option B: Reserve inventory only during checkout.
+
+**Why:** Prevents abandoned carts from locking inventory and aligns with common business practices. Inventory validation occurs immediately before order creation, avoiding false out-of-stock scenarios for hot items.
+
+---
+
+## Decision: Coupon Validation at Checkout
+
+**Context:** What problem were you solving?
+Product pricing structures, specific campaign exclusions, and promotion validity periods can shift while a shopper leaves items sitting inside their active cart for extended durations.
+
+**Options Considered:**
+- Option A: Apply and lock discount totals immediately within the cart payload layer.
+- Option B: Display estimates in the cart, but calculate and validate all coupon rules directly during the checkout flow.
+
+**Choice:** Option B: Coupons are validated only during checkout.
+
+**Why:** The cart displays estimated totals while checkout recalculates the final payable amount using the latest product prices and coupon rules. This prevents stale pricing issues and ensures expired or deleted coupons are rejected gracefully at execution time.
+
+---
+
+## Decision: Immutable Order Snapshots
+
+**Context:** What problem were you solving?
+Historical order logs must remain completely accurate for auditing and finance purposes, even if global product catalog descriptions or prices change months later.
+
+**Options Considered:**
+- Option A: Store only foreign-key references to base product IDs inside completed orders.
+- Option B: Take a full snapshot of all active item values at the millisecond of order placement.
+
+**Choice:** Option B: Orders store product name, purchase price, quantity, and applied discount explicitly.
+
+**Why:** Storing data inline ensures historical orders remain completely accurate regardless of later catalog item modifications. This provides perfect auditing without complex temporal database version schemas.
+
+---
+
+## Decision: Idempotent Checkout
+
+**Context:** What problem were you solving?
+Network drops, rapid button clicking, or automatic frontend retry mechanisms can issue duplicate checkout payloads, resulting in accidental double-billing or multiple order creations.
+
+**Options Considered:**
+- Option A: Process every single request independently as an un-tracked separate entity.
+- Option B: Enforce required unique idempotency tracking keys per transaction header.
+
+**Choice:** Option B: Checkout requests are idempotent via an `X-Idempotency-Key` tracking system.
+
+**Why:** Repeated requests using the same idempotency key return the original cached order creation result rather than creating duplicate orders. Combined with an asynchronous mutex lock, it guarantees complete state protection during high-concurrency race windows.
+
+```
