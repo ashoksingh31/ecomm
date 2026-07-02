@@ -1,0 +1,1501 @@
+{
+  "info": {
+    "name": "Ecom Cart & Checkout Backend",
+    "description": "Self-contained collection: EVERY request signs its own JWT locally in its pre-request script (matching src/config/settings.py's dev secret) - no dependency on collection-level script scope carrying over, since Collection Runner doesn't guarantee that across folder-only runs. HOW TO RUN: (1) start the server with `uvicorn src.main:app --reload`. (2) For a clean 'Milestone Walkthrough' run, restart the server first (no reset endpoint exists; state is in-memory) - right-click the folder -> Run folder. (3) Running the ENTIRE collection at once works but shifts the milestone math if other folders already placed orders - restart the server first. Note: this Postman suite is a manual/demo smoke test; the graded, authoritative test suite is `pytest` (tests/, 26 assertions).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{bearer_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "jwt_secret",
+      "value": "dev-only-secret-change-me"
+    },
+    {
+      "key": "user_id",
+      "value": "1"
+    },
+    {
+      "key": "admin_user_id",
+      "value": "999"
+    },
+    {
+      "key": "bearer_token",
+      "value": ""
+    },
+    {
+      "key": "milestone_code",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Reports ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Non-empty array', () => pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products"
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns id 1', () => pm.expect(pm.response.json().id).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products/1"
+          }
+        },
+        {
+          "name": "Get Product - Not Found",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products/9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "View Cart",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has items array', () => pm.expect(pm.response.json()).to.have.property('items'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/cart"
+          }
+        },
+        {
+          "name": "Add Item to Cart",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Quantity is 2', () => pm.expect(pm.response.json().items.find(i => i.product_id === 1).quantity).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Add Item - Invalid Quantity",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Cart Item Quantity",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Quantity is 5', () => pm.expect(pm.response.json().items.find(i => i.product_id === 1).quantity).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/cart/items/1",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Remove Cart Item",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Product 1 removed', () => pm.expect(pm.response.json().items.find(i => i.product_id === 1)).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/cart/items/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkout",
+      "item": [
+        {
+          "name": "Checkout (no discount)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('No discount applied', () => { const b = pm.response.json(); pm.expect(b.total).to.eql(b.subtotal); pm.expect(b.discount_amount).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"{{$guid}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Checkout - Empty Cart Fails",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"{{$guid}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Checkout (with discount code)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status handled (201/400/403/404)', () => pm.expect([201,400,403,404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"{{$guid}}\",\n  \"discount_code\": \"{{milestone_code}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "List My Orders",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders"
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status handled (200/404)', () => pm.expect([200,404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Generate Discount Codes",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('admin_user_id') || '999', 10), true));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status handled (200/409)', () => pm.expect([200,409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/discount-codes/generate"
+          }
+        },
+        {
+          "name": "Generate Discount Codes - Forbidden for Non-Admin",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('user_id') || '1', 10), false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/discount-codes/generate"
+          }
+        },
+        {
+          "name": "Get Stats",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(parseInt(pm.collectionVariables.get('admin_user_id') || '999', 10), true));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has expected fields', () => { const b = pm.response.json(); ['total_orders','total_items_purchased','total_revenue','total_discount_amount','discount_codes'].forEach(k => pm.expect(b).to.have.property(k)); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/stats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Milestone Walkthrough (run this folder in isolation, on a freshly restarted server)",
+      "description": "Right-click this folder -> Run folder, immediately after restarting uvicorn. Do NOT run alongside other folders in the same server session.",
+      "item": [
+        {
+          "name": "1. Add Item - User 1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(1, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Checkout - User 1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(1, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sequence number is 1', () => pm.expect(pm.response.json().sequence_number).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Add Item - User 2",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(2, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "4. Checkout - User 2",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(2, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sequence number is 2', () => pm.expect(pm.response.json().sequence_number).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "5. Add Item - User 3",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(3, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "6. Checkout - User 3",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(3, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sequence number is 3', () => pm.expect(pm.response.json().sequence_number).to.eql(3));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-3\"\n}"
+            }
+          }
+        },
+        {
+          "name": "7. Add Item - User 4",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(4, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "8. Checkout - User 4",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(4, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sequence number is 4', () => pm.expect(pm.response.json().sequence_number).to.eql(4));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-4\"\n}"
+            }
+          }
+        },
+        {
+          "name": "9. Add Item - User 5",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(5, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "10. Checkout - User 5",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(5, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sequence number is 5 (the milestone order)', () => pm.expect(pm.response.json().sequence_number).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-5\"\n}"
+            }
+          }
+        },
+        {
+          "name": "11. Admin - Generate Discount Code",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(999, true));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('One code generated, owned by user 5', () => { pm.expect(body.generated.length).to.eql(1); pm.expect(body.generated[0].owner_user_id).to.eql(5); });",
+                  "if (body.generated && body.generated.length > 0) { pm.collectionVariables.set('milestone_code', body.generated[0].code); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/discount-codes/generate"
+          }
+        },
+        {
+          "name": "12. Add Item - User 5 (for redemption)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(5, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 2,\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "13. Checkout - User 5 (redeems the code)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(5, false));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Discount applied', () => pm.expect(pm.response.json().discount_amount).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"walkthrough-order-5-redeem\",\n  \"discount_code\": \"{{milestone_code}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "14. Admin - Check Final Stats",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "function base64url(wordArray) {",
+                  "  let b64 = CryptoJS.enc.Base64.stringify(wordArray);",
+                  "  return b64.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "}",
+                  "function generateJWT(userId, isAdmin) {",
+                  "  const secret = pm.collectionVariables.get('jwt_secret');",
+                  "  const header = { alg: 'HS256', typ: 'JWT' };",
+                  "  const now = Math.floor(Date.now() / 1000);",
+                  "  const payload = { user_id: userId, is_admin: isAdmin, exp: now + 86400 };",
+                  "  const encHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));",
+                  "  const encPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));",
+                  "  const unsigned = encHeader + '.' + encPayload;",
+                  "  const signature = base64url(CryptoJS.HmacSHA256(unsigned, secret));",
+                  "  return unsigned + '.' + signature;",
+                  "}",
+                  "pm.collectionVariables.set('bearer_token', generateJWT(999, true));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('6 orders total, 1 discount code generated', () => { const b = pm.response.json(); pm.expect(b.total_orders).to.eql(6); pm.expect(b.discount_codes.length).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/stats"
+          }
+        }
+      ]
+    }
+  ]
+}
