@@ -1,5 +1,4 @@
-
-## Decision: Single Logical Cart Per User
+## Decision 1: Single Logical Cart Per User
 
 **Context:** What problem were you solving?
 Users may access the application from multiple devices or distinct browser sessions, creating potential divergence across active items and shopping state.
@@ -14,7 +13,7 @@ Users may access the application from multiple devices or distinct browser sessi
 
 ---
 
-## Decision: JWT-Based Authorization Using Claims
+## Decision 2: JWT-Based Authorization Using Claims
 
 **Context:** What problem were you solving?
 Administrative endpoints (such as coupon creation and deletion) require robust access controls, but full user authentication/session state management is outside the project scope.
@@ -29,7 +28,7 @@ Administrative endpoints (such as coupon creation and deletion) require robust a
 
 ---
 
-## Decision: Read-Only Product Catalog
+## Decision 3: Read-Only Product Catalog
 
 **Context:** What problem were you solving?
 The service must handle cart mutations and final product pricing valuations without expanding into a heavy, sprawling product catalog content management platform.
@@ -44,7 +43,7 @@ The service must handle cart mutations and final product pricing valuations with
 
 ---
 
-## Decision: Reserve Inventory During Checkout
+## Decision 4: Reserve Inventory During Checkout
 
 **Context:** What problem were you solving?
 Determining when to hold or deduct item stock counts so that items left in abandoned browser sessions do not lock up available warehouse supply.
@@ -59,7 +58,7 @@ Determining when to hold or deduct item stock counts so that items left in aband
 
 ---
 
-## Decision: Coupon Validation at Checkout
+## Decision 5: Coupon Validation at Checkout
 
 **Context:** What problem were you solving?
 Product pricing structures, specific campaign exclusions, and promotion validity periods can shift while a shopper leaves items sitting inside their active cart for extended durations.
@@ -74,7 +73,7 @@ Product pricing structures, specific campaign exclusions, and promotion validity
 
 ---
 
-## Decision: Immutable Order Snapshots
+## Decision 6: Immutable Order Snapshots
 
 **Context:** What problem were you solving?
 Historical order logs must remain completely accurate for auditing and finance purposes, even if global product catalog descriptions or prices change months later.
@@ -89,7 +88,7 @@ Historical order logs must remain completely accurate for auditing and finance p
 
 ---
 
-## Decision: Idempotent Checkout
+## Decision 7: Idempotent Checkout
 
 **Context:** What problem were you solving?
 Network drops, rapid button clicking, or automatic frontend retry mechanisms can issue duplicate checkout payloads, resulting in accidental double-billing or multiple order creations.
@@ -102,4 +101,20 @@ Network drops, rapid button clicking, or automatic frontend retry mechanisms can
 
 **Why:** Repeated requests using the same idempotency key return the original cached order creation result rather than creating duplicate orders. Combined with an asynchronous mutex lock, it guarantees complete state protection during high-concurrency race windows.
 
-```
+---
+
+## Decision 8 — Milestone Discount Generation: Admin-Triggered with Catch-Up
+
+**Context:** What problem were you solving?
+The assignment's FAQ explicitly lists code generation as an admin API action ("generate a discount code if the condition above is satisfied"), which argues for a manual trigger. But a purely manual trigger has a real gap: if the admin doesn't call the endpoint promptly, a customer who legitimately earned a reward at their milestone order gets nothing until someone remembers to ask for it — and if two milestones pass before the admin's next call, calling the endpoint once would only reward the most recent milestone, silently dropping the earlier one.
+
+**Options Considered:**
+- Option A: Automatic generation the instant an order hits a milestone, with the admin endpoint reduced to an idempotent backfill/recovery path.
+- Option B: Purely admin-triggered, awarding only the single most recent unclaimed milestone per call.
+- Option C: Admin-triggered, but a single call awards a code for *every* unclaimed milestone since the last generation (catch-up), not just the latest.
+
+**Choice:** Option C.
+
+**Why:** This keeps the API surface exactly as the assignment describes it (an explicit admin action, not a checkout side-effect), while still guaranteeing no earned reward is permanently lost to admin inaction — the moment the admin does call the endpoint, every customer who ever crossed an unclaimed milestone gets their code, regardless of how many milestones elapsed in between. `CouponRepository.highest_awarded_milestone()` and `CouponService.generate_new_milestone_codes()` implement this by comparing "milestones reached" (`total_orders // MILESTONE_INTERVAL`) against "milestones already awarded" and looping over the gap.
+
+**Trade-off acknowledged:** a customer who hits a milestone still doesn't receive their code *automatically* — they're dependent on the admin eventually calling the endpoint, same as Option B. Option A would close that gap entirely, but at the cost of code generation happening as an invisible checkout side-effect rather than the explicit, auditable admin action the assignment describes. If real-time reward delivery becomes a requirement, Option A remains the straightforward next step — the underlying eligibility logic (`generate_new_milestone_codes`) wouldn't need to change, only *where* it's called from.
